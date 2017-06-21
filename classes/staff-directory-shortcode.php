@@ -4,7 +4,7 @@ class Staff_Directory_Shortcode {
 
     public static $staff_query;
 
-	static function register_shortcode() {
+    static function register_shortcode() {
 
         //Main shortcode to initiate plugin
         add_shortcode( 'staff-directory', array( 'Staff_Directory_Shortcode', 'shortcode' ) );
@@ -14,6 +14,8 @@ class Staff_Directory_Shortcode {
 
         //List of predefined shortcode tags
         $predefined_shortcodes = array(
+            'if_def',
+            'if_def_or',
             'name',
             'name_header',
             'photo',
@@ -21,6 +23,7 @@ class Staff_Directory_Shortcode {
             'bio',
             'bio_paragraph',
             'profile_link',
+            'profile_url',
             'category'
         );
 
@@ -39,7 +42,7 @@ class Staff_Directory_Shortcode {
                 add_shortcode( $meta_key, array( 'Staff_Directory_Shortcode', 'meta_shortcode' ) );
             }
         }
-	}
+    }
 
     /*** Begin shortcode functions ***/
 
@@ -50,6 +53,37 @@ class Staff_Directory_Shortcode {
             return $meta_value;
         } else {
             return ""; //print nothing and remove tag if no value
+        }
+
+    }
+
+    static function if_def_shortcode( $atts, $content = NULL ) {
+
+        if(is_null($content) || $content == '') return;
+
+        foreach($atts as $key) {
+            $result = do_shortcode("[".strtolower($key)."]");
+
+            if (!$result) return;
+        }
+
+        return do_shortcode($content);
+    }
+
+    static function if_def_or_shortcode( $atts, $content = NULL ) {
+
+        if(is_null($content) || $content == '') return;
+
+        $result = array();
+
+        foreach($atts as $key) {
+            $result[] = do_shortcode("[".strtolower($key)."]");
+        }
+
+        if (!empty(array_filter($result))) {
+            return do_shortcode($content);
+        } else {
+            return;
         }
 
     }
@@ -74,20 +108,29 @@ class Staff_Directory_Shortcode {
         return get_the_title();
     }
 
-    static function name_header_shortcode(){
-        return "<h3>" . self::name_shortcode() . "</h3>";
+    static function name_header_shortcode($atts){
+        $atts = shortcode_atts( array(
+            'htmltag'     => "h3"
+        ), $atts);
+        return "<".$atts['htmltag'].">" . self::name_shortcode() . "</".$atts['htmltag'].">";
     }
 
-    static function photo_url_shortcode(){
+    static function photo_url_shortcode($atts){
+        $atts = shortcode_atts( array(
+            'size'     => "large"
+        ), $atts);
         if ( has_post_thumbnail() ) {
-            $attachment_array = wp_get_attachment_image_src( get_post_thumbnail_id() );
+            $attachment_array = wp_get_attachment_image_src( get_post_thumbnail_id(), $atts['target'] );
             return $attachment_array[0];
         } else {
             return "";
         }
     }
 
-    static function photo_shortcode(){
+    static function photo_shortcode($atts){
+        $atts = shortcode_atts( array(
+            'size'     => "large"
+        ), $atts);
         $photo_url = self::photo_url_shortcode();
         if(!empty($photo_url)){
             return '<img src="' . $photo_url . '" />';
@@ -112,7 +155,7 @@ class Staff_Directory_Shortcode {
     static function profile_link_shortcode($atts, $content = NULL){
         $atts = shortcode_atts( array(
             'target'     => "_self",
-            'inner_text' => "Profile"
+            'inner_text' => __("Profile")
         ), $atts);
         $profile_link = get_permalink( get_the_ID() );
 
@@ -121,6 +164,10 @@ class Staff_Directory_Shortcode {
         } else {
             return "<a href='" . $profile_link . "' target='" . $atts['target'] . "'>" . $atts['inner_text'] . "</a>";
         }
+    }
+
+    static function profile_url_shortcode(){
+        return $profile_link = get_permalink( get_the_ID() );
     }
 
     static function category_shortcode($atts){
@@ -148,7 +195,7 @@ class Staff_Directory_Shortcode {
 
     }
 
-	static function shortcode( $params ) {
+    static function shortcode( $params ) {
 
         $staff_settings = Staff_Directory_Settings::shared_instance();
 
@@ -163,34 +210,34 @@ class Staff_Directory_Shortcode {
             'template' => $staff_settings->get_current_default_staff_template()
         );
 
-		$params = shortcode_atts( $default_params, $params );
+        $params = shortcode_atts( $default_params, $params );
 
-		return Staff_Directory_Shortcode::show_staff_directory( $params );
-	}
+        return Staff_Directory_Shortcode::show_staff_directory( $params );
+    }
 
     /*** End shortcode functions ***/
 
-	static function show_staff_directory( $params = null ) {
-		global $wpdb;
+    static function show_staff_directory( $params = null ) {
+        global $wpdb;
 
-		// make sure we aren't calling both id and cat at the same time
-		if ( isset( $params['id'] ) && $params['id'] != '' && isset( $params['cat'] ) && $params['cat'] != '' ) {
-			return "<strong>ERROR: You cannot set both a single ID and a category ID for your Staff Directory</strong>";
-		}
+        // make sure we aren't calling both id and cat at the same time
+        if ( isset( $params['id'] ) && $params['id'] != '' && isset( $params['cat'] ) && $params['cat'] != '' ) {
+            return "<strong>ERROR: You cannot set both a single ID and a category ID for your Staff Directory</strong>";
+        }
 
-		$query_args = array(
-			'post_type'      => 'staff',
-			'posts_per_page' => - 1
-		);
+        $query_args = array(
+            'post_type'      => 'staff',
+            'posts_per_page' => - 1
+        );
 
-		// check if it's a single staff member first, since single members won't be ordered
-		if ( ( isset( $params['id'] ) && $params['id'] != '' ) && ( ! isset( $params['cat'] ) || $params['cat'] == '' ) ) {
-			$query_args['p'] = $params['id'];
-		}
-		// ends single staff
+        // check if it's a single staff member first, since single members won't be ordered
+        if ( ( isset( $params['id'] ) && $params['id'] != '' ) && ( ! isset( $params['cat'] ) || $params['cat'] == '' ) ) {
+            $query_args['p'] = $params['id'];
+        }
+        // ends single staff
 
-		// check if we're returning a staff category
-		if ( ( isset( $params['cat'] ) && $params['cat'] != '' ) && ( ! isset( $params['id'] ) || $params['id'] == '' ) ) {
+        // check if we're returning a staff category
+        if ( ( isset( $params['cat'] ) && $params['cat'] != '' ) && ( ! isset( $params['id'] ) || $params['id'] == '' ) ) {
             $cats_query = array();
 
             $cats = explode( ',', $params['cat'] );
@@ -208,31 +255,31 @@ class Staff_Directory_Shortcode {
             }
 
             $query_args['tax_query'] = $cats_query;
-		}
+        }
 
-		if ( isset( $params['orderby'] ) && $params['orderby'] != '' ) {
-			$query_args['orderby'] = $params['orderby'];
-		}
-		if ( isset( $params['order'] ) && $params['order'] != '' ) {
-			$query_args['order'] = $params['order'];
-		}
-		if ( isset( $params['meta_key'] ) && $params['meta_key'] != '' ) {
-			$query_args['meta_key'] = $params['meta_key'];
-		}
+        if ( isset( $params['orderby'] ) && $params['orderby'] != '' ) {
+            $query_args['orderby'] = $params['orderby'];
+        }
+        if ( isset( $params['order'] ) && $params['order'] != '' ) {
+            $query_args['order'] = $params['order'];
+        }
+        if ( isset( $params['meta_key'] ) && $params['meta_key'] != '' ) {
+            $query_args['meta_key'] = $params['meta_key'];
+        }
 
         //Store in class scope so we can access query from staff_loop shortcode
-		Staff_Directory_Shortcode::$staff_query = new WP_Query( $query_args );
+        Staff_Directory_Shortcode::$staff_query = new WP_Query( $query_args );
 
         $output = '';
 
         if ( Staff_Directory_Shortcode::$staff_query->have_posts() ) {
-		    $output = self::retrieve_template_html($params['template']);
+            $output = self::retrieve_template_html($params['template']);
         }
 
         wp_reset_query();
 
-		return $output;
-	}
+        return $output;
+    }
 
     static function custom_pre_shortcode_escaping($html) {
 
